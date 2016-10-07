@@ -1,7 +1,7 @@
 var _ = require('busyman'),
-    Ziee = require('../node_modules/zigbee-shepherd/node_modules/ziee'),
-    Device = require('../node_modules/zigbee-shepherd/lib/model/device'),
-    Endpoint = require('../node_modules/zigbee-shepherd/lib/model/endpoint');
+    Ziee = require('../../node_modules/zigbee-shepherd/node_modules/ziee'),
+    Device = require('../../node_modules/zigbee-shepherd/lib/model/device'),
+    Endpoint = require('../../node_modules/zigbee-shepherd/lib/model/endpoint');
 
 var sensorDevInfo = {
         type: 'EndDevice',
@@ -75,7 +75,7 @@ function createDev (devInfo) {
     var dev = new Device(devInfo);
 
     dev._setId(++id);
-    dev.setNetInfo({ status: 'online' });
+    dev.update({ status: 'online' });
 
     _.forEach(devInfo.endpoints, function (simpleDesc) {
         ep = new Endpoint(dev, simpleDesc);

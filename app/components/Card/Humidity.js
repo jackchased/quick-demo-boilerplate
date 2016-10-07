@@ -1,5 +1,4 @@
 import React from 'react';
-import HumidityIcon from '../../static/humid.png';
 
 var fgColor = "#FFF",
     bgColor = "#8ED4E8",

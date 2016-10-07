@@ -6,7 +6,7 @@ var _ = require('busyman'),
     chalk = require('chalk'),
     ZShepherd = require('zigbee-shepherd');
 
-var mockDevs = require('./dev_mock'),
+var model = require('./model/model'),
     ioServer = require('./helpers/ioServer');
 
 var server = http.createServer(),
@@ -43,7 +43,19 @@ var app = function () {
     });
 
     ioServer.regReqHdlr('permitJoin', function (args, cb) {
-        shepherd.permitJoin(args.time);
+        if (shepherd._enabled) {
+            shepherd.permitJoin(args.time);
+        } else {
+            var timeLeft = 60,
+                timeDownCounter;
+
+            timeDownCounter = setInterval(function () {
+                if (timeLeft === 0)
+                    clearInterval(timeDownCounter);
+                shepherd.emit('permitJoining', timeLeft--);
+            }, 1000);
+        }
+
         cb(null, null);
 
         if (firstPermitJoin) {
@@ -61,7 +73,7 @@ var app = function () {
             ep = shepherd.find(ieeeAddr, epId);
 
         if (ieeeAddr === '0x0000000022222222') {
-            ep.functional = mockDevs.functional;
+            ep.functional = model.functional;
             toggleDev(ep, cid, val);
         } else if (cid === 'genOnOff') {
             var cmd = val ? 'on' : 'off';
@@ -105,15 +117,11 @@ var app = function () {
 /**********************************/
 /* start shepherd                 */
 /**********************************/
-    setTimeout(function () {
-        shepherd.start(function (err) {
-            if (err)
-                console.log(err);
-            else
-                showWelcomeMsg();
-        });
-    }, 20000);
-    
+    shepherd.start(function (err) {
+        showWelcomeMsg();
+        if (err)
+            shepherd.emit('ready');
+    });
 };
 
 /**********************************/
@@ -141,7 +149,6 @@ var zbPart1 = chalk.blue('      ____   ____ _____ ___   ____ ____        ____ __
     console.log('   >>> Copyright (c) 2016 Jack Wu, The MIT License (MIT)       ');
     console.log('');
     console.log('The server is up and running, press Ctrl+C to stop server.     ');
-    console.log('');
     console.log('---------------------------------------------------------------');
 }
 
@@ -341,9 +348,9 @@ function attChangeInd (ep, cid, value) {
 }
 
 function simpleApp () {
-    var ctrlDev = mockDevs.ctrlDev,
-        sensorDev = mockDevs.sensorDev,
-        weatherDev = mockDevs.weatherDev;
+    var ctrlDev = model.ctrlDev,
+        sensorDev = model.sensorDev,
+        weatherDev = model.weatherDev;
 
     if (!shepherd.find('0x0000000011111111', 1)) {
         shepherd._registerDev(sensorDev).then(function () {
