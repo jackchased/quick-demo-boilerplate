@@ -22,7 +22,7 @@ import NoticeBar from './components/NoticeBar/NoticeBar';
 /* client app                                */
 /*********************************************/
 var store = createStore(reducer, applyMiddleware(clientMiddleware)),
-    title = 'zigbee-shepherd';
+    title = 'ZigBee-Shepherd WebApp';
 
 ioClient.start('http://' + window.location.hostname + ':3030');
 

@@ -3,9 +3,27 @@ var _ = require('busyman'),
     Device = require('../../node_modules/zigbee-shepherd/lib/model/device'),
     Endpoint = require('../../node_modules/zigbee-shepherd/lib/model/endpoint');
 
+var weatherDevInfo = {
+        type: 'EndDevice',
+        ieeeAddr: '0x00124b0001ce1001',
+        nwkAddr: 3,
+        manufId: 0,
+        epList: [ 1, 2 ],
+        endpoints: {
+            1: {    // temperature
+                profId: 0x0104, epId: 1, devId: 770, inClusterList: [ 1026 ], outClusterList: [],
+                clusters: { msTemperatureMeasurement: { dir: 1, attrs: { measuredValue: 0 } } }
+            },
+            2: {    // humidity
+                profId: 0x0104, epId: 2, devId: 770, inClusterList: [ 1029 ], outClusterList: [],
+                clusters: { msRelativeHumidity : { dir: 1, attrs: { measuredValue: 0 } } }
+            }
+        }
+    };
+
 var sensorDevInfo = {
         type: 'EndDevice',
-        ieeeAddr: '0x0000000011111111',
+        ieeeAddr: '0x00124b0001ce1002',
         nwkAddr: 1,
         manufId: 0,
         epList: [ 1, 2, 3 ],
@@ -27,7 +45,7 @@ var sensorDevInfo = {
 
 var ctrlDevInfo = {
         type: 'EndDevice',
-        ieeeAddr: '0x0000000022222222',
+        ieeeAddr: '0x00124b0001ce1003',
         nwkAddr: 2,
         manufId: 0,
         epList: [ 1, 2, 3 ],
@@ -43,24 +61,6 @@ var ctrlDevInfo = {
             3: {    // switch
                 profId: 0x0104, epId: 3, devId: 0, inClusterList: [], outClusterList: [6],
                 clusters: { genOnOff : { dir: 2, attrs: { onOff: 0 } } }
-            }
-        }
-    };
-
-var weatherDevInfo = {
-        type: 'EndDevice',
-        ieeeAddr: '0x0000000033333333',
-        nwkAddr: 3,
-        manufId: 0,
-        epList: [ 1, 2 ],
-        endpoints: {
-            1: {    // temperature
-                profId: 0x0104, epId: 1, devId: 770, inClusterList: [ 1026 ], outClusterList: [],
-                clusters: { msTemperatureMeasurement: { dir: 1, attrs: { measuredValue: 0 } } }
-            },
-            2: {    // humidity
-                profId: 0x0104, epId: 2, devId: 770, inClusterList: [ 1029 ], outClusterList: [],
-                clusters: { msRelativeHumidity : { dir: 1, attrs: { measuredValue: 0 } } }
             }
         }
     };

@@ -26,13 +26,12 @@ var app = function () {
     ioServer.regReqHdlr('getDevs', function (args, cb) {
         var devs = {};
 
-        shepherd.list().forEach(function (dev) {
+        _.forEach(shepherd.list(), function (dev) {
             var eps = [];
 
-            if (dev.nwkAddr === 0)
-                return;
+            if (dev.nwkAddr === 0) return;
 
-            dev.epList.forEach(function (epId) {
+            _.forEach(dev.epList, function (epId) {
                 eps.push(shepherd.find(dev.ieeeAddr, epId));
             });
 
@@ -46,7 +45,7 @@ var app = function () {
         if (shepherd._enabled) {
             shepherd.permitJoin(args.time);
         } else {
-            var timeLeft = 60,
+            var timeLeft = 15,
                 timeDownCounter;
 
             timeDownCounter = setInterval(function () {
@@ -65,14 +64,14 @@ var app = function () {
     });
 
     ioServer.regReqHdlr('write', function (args, cb) {
-        var auxId =  _.split(args.auxId, '.'),  // [ epId, cid, rid ]
+        var auxId =  _.split(args.auxId, '/'),  // [ epId, cid, rid ]
             ieeeAddr = args.permAddr,
             epId = parseInt(auxId[0]),
-            cid = auxId[1],
+            cid = auxId[2],
             val = args.value,
             ep = shepherd.find(ieeeAddr, epId);
 
-        if (ieeeAddr === '0x0000000022222222') {
+        if (ieeeAddr === '0x00124b0001ce1003') {
             ep.functional = model.functional;
             toggleDev(ep, cid, val);
         } else if (cid === 'genOnOff') {
@@ -107,7 +106,43 @@ var app = function () {
                 devStatusInd(msg.endpoints[0].getIeeeAddr(), msg.data);
                 break;
             case 'devChange':
-                attrsChangeInd(msg.endpoints[0].getIeeeAddr(), getGadInfo(msg.endpoints[0]));
+                var gadInfo = getGadInfo(msg.endpoints[0]),
+                    data = msg.data,
+                    ep;
+
+                attrsChangeInd(msg.endpoints[0].getIeeeAddr(), gadInfo);
+
+                if (gadInfo.type === 'Switch' && data.cid === 'genOnOff') {
+                    ep = shepherd.find('0x00124b0001ce1003', 2);
+                    if (!ep) return;
+                    toggleDev(ep, 'genOnOff', data.data.onOff);
+                }
+
+                if (gadInfo.type === 'Illuminance' && data.cid === 'msIlluminanceMeasurement') {
+                    ep = shepherd.find('0x00124b0001ce1003', 2);
+                    if (!ep) return;
+                    var light = ep.clusters.get('genOnOff', 'attrs', 'onOff');
+                    if (data.data.measuredValue < 50)  {
+                        toggleDev(ep, 'genOnOff', true);
+                        setTimeout(function () {
+                            attChangeInd(shepherd.find('0x00124b0001ce1002', 1), 'msIlluminanceMeasurement', 58);
+                        }, 3000);
+                    } else if (light){
+                        toggleDev(ep, 'genOnOff', false);
+                    }
+                }
+
+                if (gadInfo.type === 'Pir' && data.cid === 'msOccupancySensing') {
+                    ep = shepherd.find('0x00124b0001ce1003', 2);
+                    if (!ep) return;
+                    toggleDev(ep, 'genOnOff', data.data.occupancy);
+                }
+
+                if (gadInfo.type === 'Flame' && data.cid === 'genBinaryInput') {
+                    ep = shepherd.find('0x00124b0001ce1003', 1);
+                    if (!ep) return;
+                    toggleDev(ep, 'genBinaryInput', data.data.presentValue);
+                }
                 break;
             default:
                 break;
@@ -144,7 +179,7 @@ var zbPart1 = chalk.blue('      ____   ____ _____ ___   ____ ____        ____ __
     console.log(chalk.gray('         A network server and manager for the ZigBee machine network'));
     console.log('');
     console.log('   >>> Author:     Jack Wu (jackchased@gmail.com)              ');
-    console.log('   >>> Version:    zigbee-shepherd v0.0.6                      ');
+    console.log('   >>> Version:    zigbee-shepherd v0.2.0                      ');
     console.log('   >>> Document:   https://github.com/zigbeer/zigbee-shepherd  ');
     console.log('   >>> Copyright (c) 2016 Jack Wu, The MIT License (MIT)       ');
     console.log('');
@@ -181,7 +216,7 @@ function setLeaveMsg() {
 /**********************************/
 function readyInd () {
     ioServer.sendInd('ready', {});
-    console.log(chalk.green('[         ready ] '));
+    console.log(chalk.green('[         ready ] Waiting for device joining...'));
 }
 
 function permitJoiningInd (timeLeft) {
@@ -241,7 +276,7 @@ function getGadInfo (ep) {
 
     return {
         type: gadType.type,
-        auxId: epInfo.epId + '.' + gadType.cid + '.' + gadType.rid,
+        auxId: epInfo.epId + '/' + gadType.type + '/' + gadType.cid + '/' + gadType.rid,
         value: _.isNumber(val) ? Math.round(val) : val
     };
 }
@@ -368,7 +403,7 @@ function simpleApp () {
     }
 
     setTimeout(function () {
-        toastInd('Device ' + weatherDev.ieeeAddr + ' will join the network');
+        toastInd('Device ' + weatherDev.ieeeAddr + ' will join: Temp. + Humid. Sensors');
 
         setTimeout(function () {
             var endpoints = [];
@@ -377,6 +412,8 @@ function simpleApp () {
             });
             shepherd.emit('ind', { type: 'devIncoming', endpoints: endpoints, data: weatherDev.ieeeAddr });
             shepherd.emit('ind', { type: 'devStatus', endpoints: endpoints, data: 'online' });
+            attChangeInd(weatherDev.getEndpoint(1), 'msTemperatureMeasurement', 26);
+            attChangeInd(weatherDev.getEndpoint(2), 'msRelativeHumidity', 40);
         }, 3000);
 
         setInterval(function () {
@@ -384,11 +421,11 @@ function simpleApp () {
                 humidVal = 40 + Math.random() * 10;
             attChangeInd(weatherDev.getEndpoint(1), 'msTemperatureMeasurement', tempVal);
             attChangeInd(weatherDev.getEndpoint(2), 'msRelativeHumidity', humidVal);
-        }, 3000);
-    }, 100);
+        }, 5000);
+    }, 1000);
 
     setTimeout(function () {
-        toastInd('Device ' + sensorDev.ieeeAddr + ' will join the network');
+        toastInd('Device ' + sensorDev.ieeeAddr + ' will join: Illum. + PIR + Flame Sensors');
 
         setTimeout(function () {
             var endpoints = [];
@@ -398,10 +435,10 @@ function simpleApp () {
             shepherd.emit('ind', { type: 'devIncoming', endpoints: endpoints, data: sensorDev.ieeeAddr });
             shepherd.emit('ind', { type: 'devStatus', endpoints: endpoints, data: 'online' });
         }, 3000);
-    }, 3500);
+    }, 5000);
 
     setTimeout(function () {
-        toastInd('Device ' + ctrlDev.ieeeAddr + ' will join the network');
+        toastInd('Device ' + ctrlDev.ieeeAddr + ' will join: On/Off Switch + Light Bulb + Buzzer');
 
         setTimeout(function () {
             var endpoints = [];
@@ -411,103 +448,47 @@ function simpleApp () {
             shepherd.emit('ind', { type: 'devIncoming', endpoints: endpoints, data: ctrlDev.ieeeAddr });
             shepherd.emit('ind', { type: 'devStatus', endpoints: endpoints, data: 'online' });
         }, 3000);
-    }, 7000);
+    }, 9000);
 
     setTimeout(function () {
-        toastInd('You can click on a lamp or a buzzer');
-    }, 11000);
+        toastInd('You can try to click on the Light Bulb and Buzzer');
+    }, 13000);
 
     setTimeout(function () {
-        toastInd('User will turn on the light switch');
-
-        setTimeout(function () {  // turn on the light switch
-            attChangeInd(ctrlDev.getEndpoint(3), 'genOnOff', true);
-        }, 4000);
-
-        setTimeout(function () {  // turn on the light
-            toggleDev(ctrlDev.getEndpoint(2), 'genOnOff', true);
-        }, 4300);
+        toastInd('Someone turn On the Light Bulb by On/Off Switch');
+        attChangeInd(ctrlDev.getEndpoint(3), 'genOnOff', true);       // turn on the light switch 
 
         setTimeout(function () {
-            toastInd('User will turn off the light switch');
-        }, 6500);
-
-        setTimeout(function () {  // turn off the light switch
-            attChangeInd(ctrlDev.getEndpoint(3), 'genOnOff', false);
-        }, 10500);
-
-        setTimeout(function () {  // turn off the light
-            toggleDev(ctrlDev.getEndpoint(2), 'genOnOff', false);
-        }, 11000);
-    }, 17000);
-
-    setTimeout(function () {
-        toastInd('Illumination is less than 50 lux, light would be turned on');
-
-        setTimeout(function () {
-            attChangeInd(sensorDev.getEndpoint(1), 'msIlluminanceMeasurement', 39);
-        }, 4500);
-
-        setTimeout(function () {
-            toggleDev(ctrlDev.getEndpoint(2), 'genOnOff', true);
-        }, 4800);
-
-        setTimeout(function () {
-            toastInd('Illumination is greater than 50 lux, light would be turned off');
-        }, 6000);
-
-        setTimeout(function () {
-            attChangeInd(sensorDev.getEndpoint(1), 'msIlluminanceMeasurement', 58);
-        }, 10500);
-
-        setTimeout(function () {
-            toggleDev(ctrlDev.getEndpoint(2), 'genOnOff', false);
-        }, 10800);
-
-        setTimeout(function () {
-            attChangeInd(sensorDev.getEndpoint(1), 'msIlluminanceMeasurement', 66);
-        }, 12000);
-    }, 29000);
-
-    setTimeout(function () {
-        toastInd('PIR sensed someone walking around, light would be turned on');
-
-        setTimeout(function () {
-            attChangeInd(sensorDev.getEndpoint(3), 'msOccupancySensing', true);
+            attChangeInd(ctrlDev.getEndpoint(3), 'genOnOff', false);  // turn off the light switch
         }, 5000);
+    }, 22000);
 
-        setTimeout(function () {
-            toggleDev(ctrlDev.getEndpoint(2), 'genOnOff', true);
-        }, 5300);
+    setTimeout(function () {
+        toastInd('Illumination < 50 lux, Light Bulb would be turned On');
+        attChangeInd(sensorDev.getEndpoint(1), 'msIlluminanceMeasurement', 39);
+    }, 30000);
+
+    setTimeout(function () {
+        toastInd('Auto light up when PIR sensed someone walking around');
+        attChangeInd(sensorDev.getEndpoint(3), 'msOccupancySensing', true);
 
         setTimeout(function () {
             attChangeInd(sensorDev.getEndpoint(3), 'msOccupancySensing', false);
-        }, 9500);
-
-        setTimeout(function () {
-            toggleDev(ctrlDev.getEndpoint(2), 'genOnOff', false);
-        }, 10500);
-    }, 41000);
+        }, 6000);
+    }, 36000);
 
     setTimeout(function () {
-        toastInd('Flame sensor detect the presence of a fire, buzzer would be turned on');
-
-        setTimeout(function () {
-            attChangeInd(sensorDev.getEndpoint(2), 'genBinaryInput', true);
-        }, 5000);
-
-        setTimeout(function () {
-            toggleDev(ctrlDev.getEndpoint(1), 'genBinaryInput', true);
-        }, 5300);
+        toastInd('Buzzing ..., Fire detected!!');
+        attChangeInd(sensorDev.getEndpoint(2), 'genBinaryInput', true);
 
         setTimeout(function () {
             attChangeInd(sensorDev.getEndpoint(2), 'genBinaryInput', false);
-        }, 9500);
+        }, 6000);
+    }, 45000);
 
-        setTimeout(function () {
-            toggleDev(ctrlDev.getEndpoint(1), 'genBinaryInput', false);
-        }, 10500);
-    }, 53000);
+    setTimeout(function () {
+        toastInd('Demo Ended!');
+    }, 52000);
 }
 
 module.exports = app;
